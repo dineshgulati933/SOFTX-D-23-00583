@@ -70,7 +70,7 @@ class Parameters:
     def __init__(self, Kcbini=0.15, Kcbmid=1.10, Kcbend=0.50, Lini=25,
                  Ldev=50, Lmid=50, Lend=25, hini=0.010, hmax=1.20,
                  thetaFC=0.250, thetaWP=0.100, theta0=0.100, Zrini=0.20,
-                 Zrmax=1.40, pbase=0.50, Ze=0.10, REW=8.0, CN2=90, comment=''):
+                 Zrmax=1.40, pbase=0.50, Ze=0.10, REW=8.0, CN2=70, tbase=10, tcutoff=30, GDD=1700, comment=''):
         """Initialize the Parameters class attributes.
 
         Default parameter values are given below. Users should update
@@ -118,9 +118,9 @@ class Parameters:
         self.Ze      = Ze
         self.REW     = REW
         self.CN2     = CN2
-        self.tbase   = 10
-        self.tcutoff = 30
-        self.GDD     = 1800
+        self.tbase   = tbase
+        self.tcutoff = tcutoff
+        self.GDD     = GDD
         self.comment = 'Comments: ' + comment.strip()
         self.tmstmp  = datetime.datetime.now()
 

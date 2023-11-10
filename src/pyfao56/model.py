@@ -125,7 +125,7 @@ class Model:
     """
 
     def __init__(self, start, end, par, wth, irr=None, irr_dyn = False, sol=None,
-                 upd=None, cons_p=False,adj_Kcb = False, comment=''):
+                 upd=None, cons_p=False,adj_Kcb = False,run_off = False, run_off_mthd = 'ASCE70', comment=''):
         """Initialize the Model class attributes.
 
         Parameters
@@ -164,6 +164,8 @@ class Model:
         self.upd = upd
         self.cons_p = cons_p
         self.adj_Kcb = adj_Kcb
+        self.run_off = run_off
+        self.run_off_mthd = str(run_off_mthd).strip().upper()
         self.comment = 'Comments: ' + comment.strip()
         self.tmstmp = datetime.datetime.now()
         self.cnames = ['Year','DOY','DOW','Date','ETref','tKcb','Kcb',
@@ -174,9 +176,9 @@ class Model:
                        'Runoff','Year','DOY','DOW','Date']
         self.odata = pd.DataFrame(columns=self.cnames)
 
-        if end is True or None:
+        if end is True:
             gdd_df = self.wth.wdata[start:][['Tmax','Tmin']]
-            gdd_df['Tmax_gdd'] = gdd_df['Tmax'].apply(lambda x:x if x<=self.par.tcutoff else self.par.tcutoff)
+            gdd_df['Tmax_gdd'] = gdd_df['Tmax'].apply(lambda x:x if self.par.tbase<=x<=self.par.tcutoff else self.par.tbase if x<self.par.tbase else self.par.tcutoff)
             gdd_df['Tmin_gdd'] = gdd_df['Tmin'].apply(lambda x:x if x>=self.par.tbase else self.par.tbase)
             gdd_df['Tavg_gdd'] = gdd_df[['Tmax_gdd','Tmin_gdd']].mean(axis = 1) - self.par.tbase
             gdd_df['gdd'] = gdd_df['Tavg_gdd'].cumsum()
@@ -369,24 +371,32 @@ class Model:
         io.rfcrp = self.wth.rfcrp
         io.cons_p = self.cons_p
         io.adj_Kcb = self.adj_Kcb
+        io.run_off = self.run_off
+        io.run_off_mthd = self.run_off_mthd
 
         #Adjustment of Kcbmid and Kcbend based on RHmin and wind speed - FAO-56 Equation 70 page 136
         cor_df = self.wth.wdata.loc[self.startDate.strftime('%Y-%j'):self.endDate.strftime('%Y-%j')]
 
         cor_avg_RHmin_mid = cor_df[self.par.Lini+self.par.Ldev:self.par.Lini+self.par.Ldev+self.par.Lmid]['RHmin'].mean()
-        #cor_avg_RHmin_mid = sorted([20.0,cor_avg_RHmin_mid,80.])[1]
+        cor_avg_RHmin_mid = sorted([20.0,cor_avg_RHmin_mid,80.])[1]
         cor_avg_wind_mid = cor_df[self.par.Lini+self.par.Ldev:self.par.Lini+self.par.Ldev+self.par.Lmid]['Wndsp']
         cor_avg_wind_mid = cor_avg_wind_mid.apply(lambda x: x*(4.87/math.log(67.8*io.wndht-5.42))).mean()
-        #cor_avg_wind_mid = sorted([1.0,cor_avg_wind_mid,6.0])[1]
+        cor_avg_wind_mid = sorted([1.0,cor_avg_wind_mid,6.0])[1]
         
         cor_avg_RHmin_end = cor_df[self.par.Lini+self.par.Ldev+self.par.Lmid:]['RHmin'].mean()
-        #cor_avg_RHmin_end = sorted([20.0,cor_avg_RHmin_end,80.])[1]
+        cor_avg_RHmin_end = sorted([20.0,cor_avg_RHmin_end,80.])[1]
         cor_avg_wind_end = cor_df[self.par.Lini+self.par.Ldev+self.par.Lmid:]['Wndsp']
         cor_avg_wind_end = cor_avg_wind_end.apply(lambda x: x*(4.87/math.log(67.8*io.wndht-5.42))).mean()
-        #cor_avg_wind_end = sorted([1.0,cor_avg_wind_end,6.0])[1]
+        cor_avg_wind_end = sorted([1.0,cor_avg_wind_end,6.0])[1]
 
-        io.adjKcbmid = io.Kcbmid + (0.04*(cor_avg_wind_mid-2)-0.004*(cor_avg_RHmin_mid-45))*(io.hmax/3)**0.3
-        io.adjKcbend = io.Kcbend + (0.04*(cor_avg_wind_end-2)-0.004*(cor_avg_RHmin_end-45))*(io.hmax/3)**0.3
+        if io.Kcbmid >= 0.45:
+            io.adjKcbmid = io.Kcbmid + (0.04*(cor_avg_wind_mid-2)-0.004*(cor_avg_RHmin_mid-45))*(io.hmax/3)**0.3
+        else:
+            io.adjKcbmid = io.Kcbmid
+        if io.Kcbend >= 0.45:
+            io.adjKcbend = io.Kcbend + (0.04*(cor_avg_wind_end-2)-0.004*(cor_avg_RHmin_end-45))*(io.hmax/3)**0.3
+        else:
+            io.adjKcbend = io.Kcbend
 
         self.odata = pd.DataFrame(columns=self.cnames)
 
@@ -421,6 +431,13 @@ class Model:
                 if mykey in self.irr.idata.index:
                     io.idep = self.irr.idata.loc[mykey,'Depth']
                     io.fw = self.irr.idata.loc[mykey,'fw']
+            elif self.irr_dyn is True:
+                if io.Dr >= self.par.pbase*io.TAW and (self.endDate-self.startDate).days-io.i > 10:
+                # or if io.fDr >=self.par.pbase*io.TAW and (self.endDate-self.startDate).days-io.i > 10:
+                    io.idep = io.Dr-0.1*io.TAW
+                    io.fw = 1
+            else:
+                io.idep = 0.0
 
             #Obtain updates for Kcb, h, and fc, if available
             io.updKcb = float('NaN')
@@ -430,6 +447,12 @@ class Model:
                 io.updKcb = self.upd.getdata(mykey,'Kcb')
                 io.updh = self.upd.getdata(mykey,'h')
                 io.updfc = self.upd.getdata(mykey,'fc')
+
+            #Five days rain mean calculation for runoff using NRCS method
+            if io.run_off is True and io.run_off_mthd == 'NRCS':
+                avg_5day_rain_df = self.wth.wdata['Rain'].rolling(5,min_periods=1).mean()
+                avg_5day_rain = avg_5day_rain_df.loc[mykey]
+                io.avg_5day_rain = avg_5day_rain
 
             #Advance timestep
             self._advance(io)
@@ -527,14 +550,6 @@ class Model:
         #Overwrite fc if updates are available
         if io.updfc > 0: io.fc = io.updfc
 
-        if self.irr_dyn is True:
-            if io.Dr >= 0.5*io.TAW and (self.endDate-self.startDate).days-io.i > 10:
-            # or if io.fDr >=0.5 and (self.endDate-self.startDate).days-io.i > 10:
-                io.idep = io.Dr-0.1*io.TAW
-                io.fw = 1
-            else:
-                io.idep = 0
-
         #Fraction soil surface wetted (fw) - FAO-56 Table 20, page 149
         if io.idep > 0.0 and io.rain > 0.0:
             pass #fw=fw input
@@ -557,23 +572,31 @@ class Model:
         #Soil water evaporation (E, mm) - FAO-56 Eq. 69
         io.E = io.Ke * io.ETref
 
-        # Runoff 
+        # Runoff (RO, mm) - ASCE70 Eq. 14-12 to 14-20 Page 451-54
         io.runoff = 0.0
-        if io.CN2 is not None:
-            if io.De < 0.5*io.REW:
-                CN = io.CN3
-            elif io.De >= 0.7*io.REW+0.3*io.TEW:
-                CN = io.CN1
-            else:
-                CN = ((io.De-0.5*io.REW)*io.CN1+(0.7*io.REW+0.3*io.TEW-io.De)*io.CN3)/(0.2*io.REW+0.3*io.TEW)
+        if io.run_off is True:
+            if io.run_off_mthd == 'ASCE70':
+                if io.De < 0.5*io.REW:
+                    CN = io.CN3
+                elif io.De >= 0.7*io.REW+0.3*io.TEW:
+                    CN = io.CN1
+                else:
+                    CN = ((io.De-0.5*io.REW)*io.CN1+(0.7*io.REW+0.3*io.TEW-io.De)*io.CN3)/(0.2*io.REW+0.3*io.TEW)
+            elif io.run_off_mthd == 'NRCS':
+                if io.avg_5day_rain < 36:
+                    CN = io.CN1
+                elif io.avg_5day_rain > 53:
+                    CN = io.CN3
+                else:
+                    CN = io.CN2
             storage = 250*((100/CN)-1)
             if io.rain <= 0.2*storage:
-                io.runoff = 0
+                roff = 0
             else:
-                io.runoff = ((io.rain-0.2*storage)**2)/(io.rain+0.8*storage)
+                roff= ((io.rain-0.2*storage)**2)/(io.rain+0.8*storage)
+                io.runoff = min([roff,io.rain])
 
         #Deep percolation under exposed soil (DPe, mm) - FAO-56 Eq. 79
-        
         io.DPe = max([io.rain - io.runoff + io.idep/io.fw - io.De,0.0])
 
         #Cumulative depth of evaporation (De, mm) - FAO-56 Eqs. 77 & 78
