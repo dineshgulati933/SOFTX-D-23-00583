@@ -175,8 +175,9 @@ class Model:
                        'fDr','Drmax','fDrmax','Db','fDb','Irrig','Rain',
                        'Runoff','Year','DOY','DOW','Date']
         self.odata = pd.DataFrame(columns=self.cnames)
+        self.end = end
 
-        if end is True:
+        if self.end is True:
             gdd_df = self.wth.wdata[start:][['Tmax','Tmin']]
             gdd_df['Tmax_gdd'] = gdd_df['Tmax'].apply(lambda x:x if self.par.tbase<=x<=self.par.tcutoff else self.par.tbase if x<self.par.tbase else self.par.tcutoff)
             gdd_df['Tmin_gdd'] = gdd_df['Tmin'].apply(lambda x:x if x>=self.par.tbase else self.par.tbase)
@@ -186,10 +187,10 @@ class Model:
             self.endDate = datetime.datetime.strptime(endDate, '%Y-%j')
             crop_span = (self.endDate-self.startDate).days+1
             crop_fao = self.par.Lini+self.par.Ldev+self.par.Lmid+self.par.Lend
-            self.par.Lini = int((self.par.Lini/crop_fao)*crop_span)
-            self.par.Ldev = int((self.par.Ldev/crop_fao)*crop_span)
-            self.par.Lmid = int((self.par.Lmid/crop_fao)*crop_span)
-            self.par.Lend = crop_span-self.par.Lini-self.par.Ldev-self.par.Lmid
+            self.Lini = int((self.par.Lini/crop_fao)*crop_span)
+            self.Ldev = int((self.par.Ldev/crop_fao)*crop_span)
+            self.Lmid = int((self.par.Lmid/crop_fao)*crop_span)
+            self.Lend = crop_span-self.Lini-self.Ldev-self.Lmid
         else:
             self.endDate   = datetime.datetime.strptime(end, '%Y-%j')
 
@@ -294,10 +295,16 @@ class Model:
         io.Kcbini  = self.par.Kcbini
         io.Kcbmid  = self.par.Kcbmid
         io.Kcbend  = self.par.Kcbend
-        io.Lini    = self.par.Lini
-        io.Ldev    = self.par.Ldev
-        io.Lmid    = self.par.Lmid
-        io.Lend    = self.par.Lend
+        if self.end is True:
+            io.Lini    = self.Lini
+            io.Ldev    = self.Ldev
+            io.Lmid    = self.Lmid
+            io.Lend    = self.Lend
+        else:
+            io.Lini    = self.par.Lini
+            io.Ldev    = self.par.Ldev
+            io.Lmid    = self.par.Lmid
+            io.Lend    = self.par.Lend
         io.hini    = self.par.hini
         io.hmax    = self.par.hmax
         io.thetaFC = self.par.thetaFC
@@ -593,7 +600,7 @@ class Model:
             if io.rain <= 0.2*storage:
                 roff = 0
             else:
-                roff= ((io.rain-0.2*storage)**2)/(io.rain+0.8*storage)
+                roff = ((io.rain-0.2*storage)**2)/(io.rain+0.8*storage)
                 io.runoff = min([roff,io.rain])
 
         #Deep percolation under exposed soil (DPe, mm) - FAO-56 Eq. 79
