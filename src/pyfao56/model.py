@@ -125,7 +125,7 @@ class Model:
     """
 
     def __init__(self, start, end, par, wth, irr=None, irr_dyn = False, sol=None,
-                 upd=None, cons_p=False,adj_Kcb = False,run_off = False, run_off_mthd = 'ASCE70', comment=''):
+                 upd=None, cons_p=False,adj_Kcb = False,run_off = False, run_off_mthd = 'MOP70', comment=''):
         """Initialize the Model class attributes.
 
         Parameters
@@ -456,7 +456,7 @@ class Model:
                 io.updfc = self.upd.getdata(mykey,'fc')
 
             #Five days rain mean calculation for runoff using NRCS method
-            if io.run_off is True and io.run_off_mthd == 'NRCS':
+            if io.run_off is True and io.run_off_mthd == 'SCS':
                 avg_5day_rain_df = self.wth.wdata['Rain'].rolling(5,min_periods=1).mean()
                 avg_5day_rain = avg_5day_rain_df.loc[mykey]
                 io.avg_5day_rain = avg_5day_rain
@@ -581,27 +581,26 @@ class Model:
 
         # Runoff (RO, mm) - ASCE70 Eq. 14-12 to 14-20 Page 451-54
         io.runoff = 0.0
-        if io.run_off is True:
-            if io.run_off_mthd == 'ASCE70':
-                if io.De < 0.5*io.REW:
-                    CN = io.CN3
+        if io.roff is True:
+            # AMC conditions as per ASCE MOP 70 Eq. 14-12 to 14-20 Page 451-54
+            if io.roff_mthd == 'MOP70':
+                if io.De <= 0.5*io.REW:
+                    CN = io.CN3 #ASCE MOP 70 Eq. 14-18
                 elif io.De >= 0.7*io.REW+0.3*io.TEW:
-                    CN = io.CN1
+                    CN = io.CN1 #ASCE MOP 70 Eq. 14-19
                 else:
-                    CN = ((io.De-0.5*io.REW)*io.CN1+(0.7*io.REW+0.3*io.TEW-io.De)*io.CN3)/(0.2*io.REW+0.3*io.TEW)
-            elif io.run_off_mthd == 'NRCS':
+                    CN = ((io.De-0.5*io.REW)*io.CN1+(0.7*io.REW+0.3*io.TEW-io.De)*io.CN3)/(0.2*io.REW+0.3*io.TEW) #ASCE MOP 70 Eq. 14-20
+            # AMC conditions as per NRCS SCS 1972
+            elif io.roff_mthd == 'SCS':
                 if io.avg_5day_rain < 36:
                     CN = io.CN1
                 elif io.avg_5day_rain > 53:
                     CN = io.CN3
                 else:
                     CN = io.CN2
-            storage = 250*((100/CN)-1)
-            if io.rain <= 0.2*storage:
-                roff = 0
-            else:
-                roff = ((io.rain-0.2*storage)**2)/(io.rain+0.8*storage)
-                io.runoff = min([roff,io.rain])
+            storage = 250*((100/CN)-1) #ASCE MOP 70 Eq. 14-12
+            if io.rain > 0.2*storage:
+                io.runoff = min([((io.rain-0.2*storage)**2)/(io.rain+0.8*storage),io.rain]) #ASCE MOP 70 Eq. 14-13
 
         #Deep percolation under exposed soil (DPe, mm) - FAO-56 Eq. 79
         io.DPe = max([io.rain - io.runoff + io.idep/io.fw - io.De,0.0])
