@@ -324,7 +324,7 @@ class Model:
         io.TEW = 1000. * (io.thetaFC - 0.50 * io.thetaWP) * io.Ze
         #Initial depth of evaporation (De, mm) - FAO-56 page 153
         io.De = 1000. * (io.thetaFC - 0.50 * io.thetaWP) * io.Ze
-        io.De = 0
+        io.De = 0 #This change is made so that simulation can mimic field capacity behavior (DG)
         if self.sol is None:
             io.solmthd = 'D' #Default homogeneous soil from Parameters
             #Initial root zone depletion (Dr, mm) - FAO-56 Equation 87
